@@ -34,7 +34,7 @@ def create_repo(token, username, repo_name):
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json"
     }
-    data = {"name": repo_name, "private": False, "auto_init": False}
+    data = {"name": repo_name, "private": PRIVATE, "auto_init": False}
     r = requests.post(url, headers=headers, json=data)
     return r.status_code in (200, 201, 422)  # 422 表示已存在
 ```
@@ -99,11 +99,13 @@ import base64
 import requests
 import os
 import sys
+from urllib.parse import quote      # 中文文件名必须编码
 
 # ============ 配置区 ============
 TOKEN = "ghp_xxxxxxxxxxxx"          # GitHub Personal Access Token
 USERNAME = "ZhangGZ-medical"        # GitHub 用户名
 REPO_PREFIX = ""                    # 仓库名前缀（可选）
+PRIVATE = True                      # True = 私有仓库（默认私有）
 # 待上传文件夹列表 [(文件夹路径, 仓库名), ...]
 FOLDERS = [
     (r"C:\path\to\skill1", "skill1"),
@@ -117,12 +119,13 @@ def create_repo(repo_name):
         "Authorization": f"token {TOKEN}",
         "Accept": "application/vnd.github.v3+json"
     }
-    data = {"name": repo_name, "private": False, "auto_init": False}
+    data = {"name": repo_name, "private": PRIVATE, "auto_init": False}
     r = requests.post(url, headers=headers, json=data)
     return r.status_code in (200, 201, 422)
 
 def upload_file(repo_name, file_path, local_path):
-    url = f"https://api.github.com/repos/{USERNAME}/{repo_name}/contents/{file_path}"
+    # 中文/空格文件名必须做 URL 编码，否则报 'ascii' codec can't encode
+    url = f"https://api.github.com/repos/{USERNAME}/{repo_name}/contents/{quote(file_path)}"
     headers = {
         "Authorization": f"token {TOKEN}",
         "Accept": "application/vnd.github.v3+json"
@@ -201,6 +204,8 @@ FOLDERS = [
 - **Token 权限**：需要 `repo` 作用域的 Personal Access Token
 - **编码问题**：Windows 终端使用 GBK 编码，避免在 print 中使用特殊 Unicode 字符（如 ✓、✗），改用 `[OK]` / `[FAIL]`
 - **仓库存在**：HTTP 422 表示仓库已存在，继续上传文件即可
+- **中文文件名**：路径必须 `quote()` 编码，否则报 `UnicodeEncodeError: 'ascii' codec can't encode characters`（2026-09-06 实战：3 个中文名 md 全部失败）。已存在的文件先 GET 探测，200 则跳过，避免重复提交生成冗余 commit
+- **无 requests 时**：可用 `urllib.request` 纯标准库实现（见 `C:\Users\G1381\WorkBuddy\2026-09-06-23-00-02\outputs\upload_patent_filing_github.py` 模板）
 - **子目录**：脚本会自动递归处理子目录（`os.walk`）
 - **Python 版本**：建议 Python 3.8+，依赖 `requests` 库
 
@@ -218,6 +223,9 @@ github_upload_diy/
 
 ## 踩坑经验
 
+- **上传前先验 Token**：开头先 `GET /user`，返回 200 再开工。否则会一路走到 PUT 阶段才批量 401，白跑一轮（2026-09-14 实战：加此行后一次成功）
+- **幂等跳过要按内容比对**：`GET contents` 拿到的 `content` 是 base64，**与本地编码结果比对一致才跳过**；只判断「文件已存在就跳过」会漏掉真正的更新。更新时 PUT 必须带上 GET 返回的 `sha`
 - **Token 无效**：401 Bad credentials → Token 过期或无效，需重新生成
 - **Windows 编码**：`sys.stdout.reconfigure(encoding='utf-8')` 可解决输出乱码，但 print 中避免 Unicode 特殊字符更稳妥
 - **仓库已存在**：HTTP 201 表示新建，422 表示已存在，两者都继续上传文件即可
+- **无 requests 库**：用 `urllib.request`（标准库）实现同样可行，`import urllib.request, urllib.error, urllib.parse` 三件套都要显式导入（`urllib.parse.quote` 不能只靠 urllib.request 的副作用）
