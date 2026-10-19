@@ -15,12 +15,13 @@ import os
 import sys
 
 # ============ 配置区 ============
-TOKEN = ""          # GitHub Personal Access Token
-USERNAME = ""       # GitHub 用户名
+TOKEN = "ghp_xxxxxxxxxxxx"          # GitHub Personal Access Token
+USERNAME = "ZhangGZ-medical"       # GitHub 用户名
+PROXY = {"http": None, "https": None}  # 绕过代理（企业网络需要）
 REPO_PREFIX = ""    # 仓库名前缀（可选，留空则无前缀）
 # 待上传文件夹列表 [(文件夹绝对路径, 仓库名), ...]
 FOLDERS = [
-    # (r"", ""),
+    (r"C:\Users\G1381\.workbuddy\skills\imi-trajs-diy", "imi-trajs-diy"),
 ]
 # ================================
 
@@ -33,7 +34,7 @@ def create_repo(repo_name):
         "Accept": "application/vnd.github.v3+json"
     }
     data = {"name": repo_name, "private": False, "auto_init": False}
-    r = requests.post(url, headers=headers, json=data)
+    r = requests.post(url, headers=headers, json=data, proxies=PROXY)
     return r.status_code in (200, 201, 422)
 
 
@@ -47,7 +48,7 @@ def upload_file(repo_name, file_path, local_path):
     with open(local_path, 'rb') as f:
         encoded = base64.b64encode(f.read()).decode()
     data = {"message": f"Upload {file_path}", "content": encoded}
-    r = requests.put(url, headers=headers, json=data)
+    r = requests.put(url, headers=headers, json=data, proxies=PROXY)
     return r.status_code in (200, 201)
 
 
