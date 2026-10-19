@@ -215,9 +215,32 @@ FOLDERS = [
 
 ```
 github_upload_diy/
-├── SKILL.md              # 本说明文件
-└── github_upload_diy.py  # 上传脚本模板
+├── SKILL.md                        # 本说明文件
+├── github_upload_diy.py            # 上传脚本模板（Python + requests）
+└── scripts/upload_via_api.ps1      # PowerShell 版：git 走不通时的 API 上传 + 自动脱敏
 ```
+
+---
+
+## 上传含密钥的技能：必须先脱敏（2026-09-16 实战）
+
+技能目录里常有 `.env`、真实 AppSecret / API Key，直接上传会：
+1. 被 GitHub **push protection 拦截**（返回 409，且响应体为空，很难排查）
+2. 即使不被拦，也等于公开泄露
+
+安全流程：
+
+```powershell
+$env:GH_TOKEN = 'ghp_xxx'
+powershell -File scripts/upload_via_api.ps1 -Owner ZhangGZ-medical -Repo my-skill `
+  -Src 'C:\path\to\skill' `
+  -Desensitize '真实SECRET=YOUR_SECRET_PLACEHOLDER','真实APPID=YOUR_APPID_PLACEHOLDER'
+```
+
+脚本默认排除 `.env` / `__pycache__` / `*.pyc`，并对 `-Desensitize` 映射做正文替换。
+上传后**务必核验**：拉取远端文件，确认占位符生效、真实密钥字符串不存在。
+
+补充模板：`.env.example`（占位符）+ `.gitignore`（含 `.env`、`images/`、`published.md` 等产出目录）。
 
 ---
 
@@ -229,3 +252,6 @@ github_upload_diy/
 - **Windows 编码**：`sys.stdout.reconfigure(encoding='utf-8')` 可解决输出乱码，但 print 中避免 Unicode 特殊字符更稳妥
 - **仓库已存在**：HTTP 201 表示新建，422 表示已存在，两者都继续上传文件即可
 - **无 requests 库**：用 `urllib.request`（标准库）实现同样可行，`import urllib.request, urllib.error, urllib.parse` 三件套都要显式导入（`urllib.parse.quote` 不能只靠 urllib.request 的副作用）
+- **空仓库必须用 Contents API**：Git Data API（`git/blobs` → `git/trees` → `git/commits`）对刚创建、无任何提交的仓库会返回 **409 Conflict**，且响应体为空；改用 `PUT /repos/{owner}/{repo}/contents/{path}` 会自动建首个提交，空仓库也能用
+- **git 网络不可用时**：沙盒内 `git clone/push` 可能报 `OpenSSL SSL_read: unexpected eof`（HTTPS 被拦），此时全程走 REST API 即可，无需 git
+- **PowerShell 脚本调试**：本机 PowerShell 的 stdout 捕获失效，脚本内一律 `Set-Content` 把结果写文件再读取；且脚本早期报错会静默 exit 1、不产出任何输出，注意检查结果文件是否生成
